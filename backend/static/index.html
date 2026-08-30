@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IncidentPilot Engineering Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <title>IncidentPilot Engineering Console</title>
+    <meta name="description" content="Autonomous Incident Investigation and Remediation Dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
@@ -16,67 +17,154 @@
                 <h1>IncidentPilot</h1>
             </div>
             <ul class="nav-links">
-                <li class="active"><a href="#">Dashboard</a></li>
-                <li><a href="#">Active Incidents</a></li>
-                <li><a href="#">Evaluation</a></li>
-                <li><a href="#">Settings</a></li>
+                <li class="active" data-view="dashboard"><a href="#" onclick="switchView('dashboard')">Dashboard</a></li>
+                <li data-view="incidents"><a href="#" onclick="switchView('incidents')">Active Incidents</a></li>
+                <li data-view="evaluation"><a href="#" onclick="switchView('evaluation')">Evaluation</a></li>
+                <li data-view="settings"><a href="#" onclick="switchView('settings')">Settings</a></li>
             </ul>
         </nav>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="topbar">
-                <h2>Engineering Dashboard</h2>
+                <h2 id="page-title">Engineering Dashboard</h2>
                 <div class="user-profile">
-                    <span class="role-badge">ENGINEER</span>
+                    <span class="role-badge">STAFF SRE</span>
                     <div class="avatar"></div>
                 </div>
             </header>
 
-            <div class="dashboard-grid">
-                <!-- Control Panel -->
-                <section class="panel control-panel">
-                    <h3>Scenario Launcher</h3>
-                    <p>Trigger a deterministic incident to evaluate the agent.</p>
-                    <div class="button-group">
-                        <button class="btn btn-primary" onclick="launchScenario('bad-deployment')">Launch Bad Deployment</button>
-                        <button class="btn btn-secondary" onclick="launchScenario('db-pool-exhaustion')">Launch DB Pool Exhaustion</button>
-                        <button class="btn btn-warning" onclick="launchScenario('redis-outage')">Launch Redis Outage</button>
-                    </div>
-                </section>
-
-                <!-- Telemetry / System Status -->
-                <section class="panel telemetry-panel">
-                    <h3>System Telemetry</h3>
-                    <div id="telemetry-display" class="metrics-grid">
-                        <div class="empty-state">No active incident.</div>
-                    </div>
-                </section>
-
-                <!-- Agent Trace / Timeline -->
-                <section class="panel trace-panel">
-                    <h3>Agent Investigation Trace</h3>
-                    <div id="trace-log" class="trace-log">
-                        <div class="empty-state">Agent idle.</div>
-                    </div>
-                </section>
-
-                <!-- Approval required dialog (hidden by default) -->
-                <div id="approval-dialog" class="approval-dialog hidden">
-                    <div class="approval-content glass">
-                        <h3>⚠️ Action Approval Required</h3>
-                        <p>The agent is requesting permission to execute a potentially destructive action:</p>
-                        <div id="approval-details" class="code-block"></div>
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="view active">
+                <div class="dashboard-grid">
+                    <!-- Control Panel -->
+                    <section class="panel control-panel">
+                        <h3>Scenario Launcher</h3>
+                        <p>Trigger a deterministic incident to evaluate the agent against stable contracts.</p>
                         <div class="button-group">
-                            <button class="btn btn-danger" onclick="approveAction()">Approve & Execute</button>
-                            <button class="btn btn-secondary" onclick="rejectAction()">Reject</button>
+                            <button class="btn btn-primary" onclick="launchScenario('bad-deployment')">Deploy Bad Release</button>
+                            <button class="btn btn-secondary" onclick="launchScenario('db-pool-exhaustion')">Exhaust DB Pool</button>
+                            <button class="btn btn-warning" onclick="launchScenario('redis-outage')">Simulate Redis Outage</button>
                         </div>
+                    </section>
+
+                    <!-- Telemetry / System Status -->
+                    <section class="panel telemetry-panel">
+                        <h3>System Telemetry</h3>
+                        <div id="telemetry-display" class="metrics-grid">
+                            <div class="empty-state">No active incident simulation.</div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Incidents View -->
+            <div id="view-incidents" class="view hidden">
+                <div class="panel">
+                    <h3>Active Incidents</h3>
+                    <div id="incident-list" class="incident-list">
+                        <div class="empty-state">No incidents running. Launch a scenario from the Dashboard.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Incident Detail View -->
+            <div id="view-incident-detail" class="view hidden">
+                <div class="incident-header panel">
+                    <div class="incident-title-row">
+                        <h3 id="detail-incident-id">Incident ID</h3>
+                        <span id="detail-incident-status" class="status-badge">Investigating</span>
+                    </div>
+                    <p id="detail-incident-desc" class="text-secondary">Loading details...</p>
+                </div>
+
+                <div class="tabs">
+                    <button class="tab-btn active" onclick="switchTab('trace')">Agent Trace</button>
+                    <button class="tab-btn" onclick="switchTab('evidence')">Evidence & Hypotheses</button>
+                    <button class="tab-btn" onclick="switchTab('audit')">Audit Log</button>
+                    <button class="tab-btn" onclick="switchTab('report')">Post-Mortem Report</button>
+                </div>
+
+                <div class="tab-content">
+                    <!-- Agent Trace / Timeline -->
+                    <div id="tab-trace" class="tab-pane active">
+                        <section class="panel trace-panel">
+                            <h3>Live Investigation Stream</h3>
+                            <div id="trace-log" class="trace-log">
+                                <div class="empty-state">Waiting for agent workflow to start...</div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Evidence & Hypotheses -->
+                    <div id="tab-evidence" class="tab-pane hidden">
+                        <div class="dashboard-grid">
+                            <section class="panel">
+                                <h3>Collected Evidence</h3>
+                                <div id="evidence-list" class="list-container">
+                                    <div class="empty-state">No evidence collected yet.</div>
+                                </div>
+                            </section>
+                            <section class="panel">
+                                <h3>Active Hypotheses</h3>
+                                <div id="hypothesis-list" class="list-container">
+                                    <div class="empty-state">No hypotheses generated.</div>
+                                </div>
+                            </section>
+                        </div>
+                    </div>
+
+                    <!-- Audit Log -->
+                    <div id="tab-audit" class="tab-pane hidden">
+                        <section class="panel">
+                            <h3>Execution Audit Log</h3>
+                            <div id="audit-log" class="list-container">
+                                <div class="empty-state">No actions audited.</div>
+                            </div>
+                        </section>
+                    </div>
+
+                    <!-- Report -->
+                    <div id="tab-report" class="tab-pane hidden">
+                        <section class="panel">
+                            <h3>Final Investigation Report</h3>
+                            <div id="final-report" class="markdown-body">
+                                <div class="empty-state">Report will be generated when incident resolves.</div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Evaluation View -->
+            <div id="view-evaluation" class="view hidden">
+                <div class="panel">
+                    <h3>Agent Evaluation Metrics</h3>
+                    <p>Coming soon: Cost per resolution, latency, tool error rates, and hallucination metrics.</p>
+                </div>
+            </div>
+
+            <!-- Approval required dialog (hidden by default) -->
+            <div id="approval-dialog" class="approval-dialog hidden">
+                <div class="approval-content glass">
+                    <div class="approval-header">
+                        <h3>⚠️ Action Approval Required</h3>
+                        <span class="risk-badge high-risk">High Risk</span>
+                    </div>
+                    <p>The agent is requesting permission to execute a destructive or state-mutating action:</p>
+                    <div id="approval-details" class="code-block"></div>
+                    <div class="approval-impact">
+                        <h4>Expected Impact:</h4>
+                        <p id="approval-impact-text">Service restart / Data mutation</p>
+                    </div>
+                    <div class="button-group right">
+                        <button class="btn btn-secondary" onclick="rejectAction()">Reject</button>
+                        <button class="btn btn-danger" onclick="approveAction()">Approve & Execute</button>
                     </div>
                 </div>
             </div>
         </main>
     </div>
-
     <script src="/js/app.js"></script>
 </body>
 </html>
