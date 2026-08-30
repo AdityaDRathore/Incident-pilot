@@ -1,12 +1,15 @@
 from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, END
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 import json
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from app.tools.definitions import ALL_TOOLS, SAFE_TOOLS, DANGEROUS_TOOLS
 
@@ -17,7 +20,7 @@ class GraphState(TypedDict):
     incident: str
     phase: str
 
-llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=os.getenv("OPENAI_API_KEY", "mock_key"))
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0, google_api_key=os.getenv("GOOGLE_API_KEY", os.getenv("GEMINI_API_KEY", "mock_key")))
 llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
 system_prompt = """You are IncidentPilot, an autonomous production incident investigator.
