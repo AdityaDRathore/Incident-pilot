@@ -1,5 +1,6 @@
 # Environments
 .env
+.agents/
 .venv
 env/
 venv/
