@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 class IncidentScenario(str, Enum):
     DB_POOL_EXHAUSTION = "db-pool-exhaustion"
     BAD_DEPLOYMENT = "bad-deployment"
+    REDIS_OUTAGE = "redis-outage"
     NORMAL = "normal"
 
 class SimulationState:
@@ -37,6 +38,13 @@ class SimulationState:
             self.logs.extend([
                 {"timestamp": self.start_time.isoformat(), "service": "checkout-api", "level": "ERROR", "message": "NullPointerException in checkout.discount.calculate"}
             ])
+        elif self.scenario == IncidentScenario.REDIS_OUTAGE:
+            self.services["checkout-api"]["status"] = "degraded"
+            self.services["redis"] = {"status": "down"}
+            self.metrics["checkout-api"] = {"error_rate": 0.05, "latency_ms": 1500, "cache_miss_rate": 0.99}
+            self.logs.extend([
+                {"timestamp": self.start_time.isoformat(), "service": "checkout-api", "level": "ERROR", "message": "Connection refused to redis:6379"}
+            ])
         else:
             self.metrics["checkout-api"] = {"error_rate": 0.01, "latency_ms": 150}
             self.metrics["postgres"] = {"active_connections": 20, "max_connections": 100}
@@ -59,12 +67,18 @@ class SimulationState:
     def restart_service(self, service: str):
         if service in self.services:
             if self.scenario == IncidentScenario.DB_POOL_EXHAUSTION and service == "checkout-api":
-                # Temporarily fix pool exhaustion, but it might come back (for now just fix it in sim)
                 self.services[service]["status"] = "healthy"
                 self.metrics[service]["error_rate"] = 0.01
                 self.metrics["postgres"]["active_connections"] = 20
                 self.scenario = IncidentScenario.NORMAL
                 return {"status": "success", "message": f"Restarted {service}. Connections reset."}
+            if self.scenario == IncidentScenario.REDIS_OUTAGE and service == "redis":
+                self.services["redis"]["status"] = "healthy"
+                self.services["checkout-api"]["status"] = "healthy"
+                self.metrics["checkout-api"]["error_rate"] = 0.01
+                self.metrics["checkout-api"]["latency_ms"] = 150
+                self.scenario = IncidentScenario.NORMAL
+                return {"status": "success", "message": f"Restarted {service}. Redis is back online."}
             return {"status": "success", "message": f"Restarted {service}."}
         return {"status": "error", "message": f"Service {service} not found."}
 

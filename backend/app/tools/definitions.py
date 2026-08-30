@@ -53,10 +53,20 @@ class RollbackDeploymentInput(BaseModel):
 @tool("rollback_deployment", args_schema=RollbackDeploymentInput)
 def rollback_deployment(service: str, to_version: str) -> str:
     """Rollback a service to a previous deployment version. Requires approval."""
-    # In a real workflow, the graph would pause before this executes.
-    # For now we simulate the tool execution directly.
     res = execute_with_policy("rollback_deployment", RiskLevel.MEDIUM, True, ["ENGINEER", "ADMIN"], 
                               simulator.rollback_deployment, CURRENT_INCIDENT_ID, service, to_version)
     return json.dumps(res)
 
-TOOLS = [search_logs, query_metrics, search_runbooks, rollback_deployment]
+class RestartServiceInput(BaseModel):
+    service: str = Field(..., description="Service to restart")
+
+@tool("restart_service", args_schema=RestartServiceInput)
+def restart_service(service: str) -> str:
+    """Restart a service to clear caches, connections, or transient state. Requires approval."""
+    res = execute_with_policy("restart_service", RiskLevel.MEDIUM, True, ["ENGINEER", "ADMIN"], 
+                              simulator.restart_service, CURRENT_INCIDENT_ID, service)
+    return json.dumps(res)
+
+SAFE_TOOLS = [search_logs, query_metrics, search_runbooks]
+DANGEROUS_TOOLS = [rollback_deployment, restart_service]
+ALL_TOOLS = SAFE_TOOLS + DANGEROUS_TOOLS

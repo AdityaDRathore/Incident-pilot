@@ -4,19 +4,21 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langgraph.prebuilt import ToolNode
+from langgraph.checkpoint.memory import MemorySaver
 import json
+import os
 
-from app.tools.definitions import TOOLS
+from app.tools.definitions import ALL_TOOLS, SAFE_TOOLS, DANGEROUS_TOOLS
+
+import operator
 
 class GraphState(TypedDict):
-    messages: Annotated[list, "The messages in the conversation"]
+    messages: Annotated[list, operator.add]
     incident: str
     phase: str
 
-import os
-
 llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0, api_key=os.getenv("OPENAI_API_KEY", "mock_key"))
-llm_with_tools = llm.bind_tools(TOOLS)
+llm_with_tools = llm.bind_tools(ALL_TOOLS)
 
 system_prompt = """You are IncidentPilot, an autonomous production incident investigator.
 You have access to diagnostic tools. 
@@ -38,32 +40,55 @@ def agent_node(state: GraphState):
     ])
     chain = prompt | llm_with_tools
     response = chain.invoke({"messages": messages, "incident": incident})
-    return {"messages": [response]} # StateGraph automatically appends list items when annotated properly (not configured here, but standard simple replacement)
+    return {"messages": [response]} 
 
 def should_continue(state: GraphState):
     messages = state["messages"]
     last_message = messages[-1]
-    # Check if there are tool calls
+    
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "action"
+        # Check if ANY tool call is dangerous
+        dangerous_tool_names = [t.name for t in DANGEROUS_TOOLS]
+        is_dangerous = any(tc["name"] in dangerous_tool_names for tc in last_message.tool_calls)
+        
+        if is_dangerous:
+            return "dangerous_action"
+        return "safe_action"
+        
     if "tool_calls" in last_message.additional_kwargs and last_message.additional_kwargs["tool_calls"]:
-        return "action"
+        dangerous_tool_names = [t.name for t in DANGEROUS_TOOLS]
+        tool_calls = last_message.additional_kwargs["tool_calls"]
+        is_dangerous = any(tc["function"]["name"] in dangerous_tool_names for tc in tool_calls)
+        
+        if is_dangerous:
+            return "dangerous_action"
+        return "safe_action"
+        
     return "end"
-
-def flatten_messages(messages):
-    """Ensure messages is a flat list of BaseMessage objects for LangGraph state."""
-    # Custom reducer approach is standard but we just replace messages in this simple state
-    pass
 
 workflow = StateGraph(GraphState)
 workflow.add_node("agent", agent_node)
 
-# Use ToolNode instead of ToolExecutor
-tool_node = ToolNode(TOOLS)
-workflow.add_node("action", tool_node)
+safe_tool_node = ToolNode(ALL_TOOLS)
+dangerous_tool_node = ToolNode(ALL_TOOLS)
+
+workflow.add_node("safe_action", safe_tool_node)
+workflow.add_node("dangerous_action", dangerous_tool_node)
 
 workflow.set_entry_point("agent")
-workflow.add_conditional_edges("agent", should_continue, {"action": "action", "end": END})
-workflow.add_edge("action", "agent")
+workflow.add_conditional_edges(
+    "agent", 
+    should_continue, 
+    {
+        "safe_action": "safe_action", 
+        "dangerous_action": "dangerous_action",
+        "end": END
+    }
+)
+workflow.add_edge("safe_action", "agent")
+workflow.add_edge("dangerous_action", "agent")
 
-app = workflow.compile()
+memory = MemorySaver()
+
+# Interrupt BEFORE executing the dangerous action node
+app = workflow.compile(checkpointer=memory, interrupt_before=["dangerous_action"])
